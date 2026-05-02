@@ -61,7 +61,6 @@ Scope {
 
         mask: Region {
             item: drawerSurface
-            // Include the curves in the clickable region too
             intersection: Intersection.Combine
             Region { item: leftCurve }
             Region { item: rightCurve }
@@ -78,10 +77,14 @@ Scope {
 
             Behavior on height {
                 NumberAnimation {
+                    id: heightAnim
                     duration: 320
                     easing.type: Easing.OutCubic
                 }
             }
+
+            // True while opening, open, or closing — false only when fully closed
+            readonly property bool active: root.drawerOpen || heightAnim.running
 
             // ── Main drawer body ──────────────────────────────
             Rectangle {
@@ -120,25 +123,24 @@ Scope {
                 }
             }
 
-            // ── Left concave curve (drawer flows into bar) ────
+            // ── Left concave curve ────────────────────────────
             Canvas {
                 id: leftCurve
                 width: root.curveRadius
                 height: root.curveRadius
                 anchors.right: drawerSurface.left
                 anchors.bottom: parent.bottom
-                visible: drawerContainer.height > 0
+                visible: drawerContainer.active
 
                 onPaint: {
                     const ctx = getContext("2d")
                     ctx.reset()
                     ctx.fillStyle = root.shellColor
                     ctx.beginPath()
-                    // Start at bottom-left, go to bottom-right, curve up to top-right
                     ctx.moveTo(0, height)
                     ctx.lineTo(width, height)
                     ctx.lineTo(width, 0)
-                    // Concave arc: center is at top-left corner (outside the shape)
+                    // Arc center at top-left (0,0), sweeping 0 → π/2
                     ctx.arc(0, 0, width, 0, Math.PI / 2, false)
                     ctx.closePath()
                     ctx.fill()
@@ -152,7 +154,7 @@ Scope {
                 height: root.curveRadius
                 anchors.left: drawerSurface.right
                 anchors.bottom: parent.bottom
-                visible: drawerContainer.height > 0
+                visible: drawerContainer.active
 
                 onPaint: {
                     const ctx = getContext("2d")
@@ -160,10 +162,10 @@ Scope {
                     ctx.fillStyle = root.shellColor
                     ctx.beginPath()
                     ctx.moveTo(0, height)
-                    ctx.lineTo(width, height)
                     ctx.lineTo(0, 0)
-                    // Concave arc: center is at top-right corner
-                    ctx.arc(width, 0, width, Math.PI, Math.PI / 2, true)
+                    ctx.lineTo(width, 0)
+                    // Arc center at top-left (0,0), sweeping 0 → π/2
+                    ctx.arc(0, 0, width, 0, Math.PI / 2, false)
                     ctx.closePath()
                     ctx.fill()
                 }
