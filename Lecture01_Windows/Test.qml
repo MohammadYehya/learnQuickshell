@@ -1,13 +1,13 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
-import QtQuick.Shapes
 
 Scope {
     id: root
 
-    // Shared state — single source of truth for the drawer
     property bool drawerOpen: false
+    readonly property color shellColor: "#1a1b26"
+    readonly property int curveRadius: 18
 
     // ── The taskbar ───────────────────────────────────────────
     PanelWindow {
@@ -19,8 +19,7 @@ Scope {
             bottom: true
         }
         implicitHeight: 48
-        color: "#1a1b26"
-
+        color: root.shellColor
         exclusionMode: ExclusionMode.Auto
 
         MouseArea {
@@ -37,26 +36,20 @@ Scope {
         }
     }
 
-    // ── The drawer (separate window, sits above the bar) ──────
+    // ── The drawer ────────────────────────────────────────────
     PanelWindow {
         id: drawerWindow
 
         readonly property int drawerWidth: 480
         readonly property int drawerHeight: 320
-        // How far the curve flares outward into the bar at the bottom corners
-        readonly property int flareRadius: 24
-        // Top corner radius (convex — rounded outward)
-        readonly property int topRadius: 16
 
         anchors {
             left: true
             right: true
             bottom: true
         }
-
         margins.bottom: bar.implicitHeight
-
-        implicitHeight: drawerHeight
+        implicitHeight: drawerHeight + root.curveRadius
 
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
@@ -66,20 +59,21 @@ Scope {
             ? WlrKeyboardFocus.OnDemand
             : WlrKeyboardFocus.None
 
-        mask: Region { item: drawerShape }
+        mask: Region {
+            item: drawerSurface
+            // Include the curves in the clickable region too
+            intersection: Intersection.Combine
+            Region { item: leftCurve }
+            Region { item: rightCurve }
+        }
 
-        // ── The custom-shaped drawer surface ──────────────────
-        Shape {
-            id: drawerShape
-
-            // Width includes the flare on each side, so visually
-            // the "main" drawer is drawerWidth wide and the flare
-            // extends beyond it
-            width: drawerWindow.drawerWidth + (drawerWindow.flareRadius * 2)
+        // Container that grows with the drawer
+        Item {
+            id: drawerContainer
+            width: drawerWindow.drawerWidth + root.curveRadius * 2
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
 
-            // Animated height — grows upward from the bar
             height: root.drawerOpen ? drawerWindow.drawerHeight : 0
 
             Behavior on height {
@@ -89,110 +83,89 @@ Scope {
                 }
             }
 
-            clip: true
-            preferredRendererType: Shape.CurveRenderer
+            // ── Main drawer body ──────────────────────────────
+            Rectangle {
+                id: drawerSurface
 
-            ShapePath {
-                strokeWidth: 0
-                strokeColor: "transparent"
-                fillColor: "#1a1b26"
+                width: drawerWindow.drawerWidth
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                height: parent.height
 
-                // Geometry shorthand
-                readonly property real w: drawerShape.width
-                readonly property real h: drawerShape.height
-                readonly property real flare: drawerWindow.flareRadius
-                readonly property real top: drawerWindow.topRadius
+                color: root.shellColor
+                topLeftRadius: 12
+                topRightRadius: 12
+                bottomLeftRadius: 0
+                bottomRightRadius: 0
+                clip: true
 
-                // Start at bottom-left of the flared base
-                startX: 0
-                startY: h
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 16
 
-                // Concave curve flaring inward and up to the drawer body
-                PathArc {
-                    x: drawerShape.shapeBottomLeftX
-                    y: drawerShape.shapeBottomLeftY
-                    radiusX: drawerWindow.flareRadius
-                    radiusY: drawerWindow.flareRadius
-                    direction: PathArc.Counterclockwise
-                }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "Drawer"
+                        color: "#a9b1d6"
+                        font.pixelSize: 20
+                        font.weight: 500
+                    }
 
-                // Up the left side of the drawer body
-                PathLine {
-                    x: drawerShape.shapeBottomLeftX
-                    y: drawerWindow.topRadius
-                }
-
-                // Top-left convex rounded corner
-                PathArc {
-                    x: drawerShape.shapeBottomLeftX + drawerWindow.topRadius
-                    y: 0
-                    radiusX: drawerWindow.topRadius
-                    radiusY: drawerWindow.topRadius
-                    direction: PathArc.Clockwise
-                }
-
-                // Across the top
-                PathLine {
-                    x: drawerShape.shapeBottomRightX - drawerWindow.topRadius
-                    y: 0
-                }
-
-                // Top-right convex rounded corner
-                PathArc {
-                    x: drawerShape.shapeBottomRightX
-                    y: drawerWindow.topRadius
-                    radiusX: drawerWindow.topRadius
-                    radiusY: drawerWindow.topRadius
-                    direction: PathArc.Clockwise
-                }
-
-                // Down the right side of the drawer body
-                PathLine {
-                    x: drawerShape.shapeBottomRightX
-                    y: drawerShape.height - drawerWindow.flareRadius
-                }
-
-                // Concave curve flaring outward and down to the right edge
-                PathArc {
-                    x: drawerShape.width
-                    y: drawerShape.height
-                    radiusX: drawerWindow.flareRadius
-                    radiusY: drawerWindow.flareRadius
-                    direction: PathArc.Counterclockwise
-                }
-
-                // Close along the bottom back to startX, startY (handled implicitly)
-                PathLine {
-                    x: 0
-                    y: drawerShape.height
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "Put widgets, launchers, or anything here"
+                        color: "#565f89"
+                        font.pixelSize: 13
+                    }
                 }
             }
 
-            // Computed positions of the drawer body's bottom corners
-            readonly property real shapeBottomLeftX: drawerWindow.flareRadius
-            readonly property real shapeBottomLeftY: height - flareRadius
-            readonly property real shapeBottomRightX: width - drawerWindow.flareRadius
-            readonly property real shapeBottomRightY: height - flareRadius
+            // ── Left concave curve (drawer flows into bar) ────
+            Canvas {
+                id: leftCurve
+                width: root.curveRadius
+                height: root.curveRadius
+                anchors.right: drawerSurface.left
+                anchors.bottom: parent.bottom
+                visible: drawerContainer.height > 0
 
-            // ── Drawer content ────────────────────────────────
-            Column {
-                anchors.centerIn: parent
-                anchors.verticalCenterOffset: -drawerWindow.flareRadius / 2
-                spacing: 16
-
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Drawer"
-                    color: "#a9b1d6"
-                    font.pixelSize: 20
-                    font.weight: 500
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    ctx.fillStyle = root.shellColor
+                    ctx.beginPath()
+                    // Start at bottom-left, go to bottom-right, curve up to top-right
+                    ctx.moveTo(0, height)
+                    ctx.lineTo(width, height)
+                    ctx.lineTo(width, 0)
+                    // Concave arc: center is at top-left corner (outside the shape)
+                    ctx.arc(0, 0, width, 0, Math.PI / 2, false)
+                    ctx.closePath()
+                    ctx.fill()
                 }
+            }
 
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Put widgets, launchers, or anything here"
-                    color: "#565f89"
-                    font.pixelSize: 13
+            // ── Right concave curve (mirror of left) ──────────
+            Canvas {
+                id: rightCurve
+                width: root.curveRadius
+                height: root.curveRadius
+                anchors.left: drawerSurface.right
+                anchors.bottom: parent.bottom
+                visible: drawerContainer.height > 0
+
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    ctx.fillStyle = root.shellColor
+                    ctx.beginPath()
+                    ctx.moveTo(0, height)
+                    ctx.lineTo(width, height)
+                    ctx.lineTo(0, 0)
+                    // Concave arc: center is at top-right corner
+                    ctx.arc(width, 0, width, Math.PI, Math.PI / 2, true)
+                    ctx.closePath()
+                    ctx.fill()
                 }
             }
         }
