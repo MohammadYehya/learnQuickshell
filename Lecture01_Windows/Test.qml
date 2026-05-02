@@ -5,22 +5,18 @@ import QtQuick
 Scope {
     id: root
 
-    // Shared state — single source of truth for the drawer
     property bool drawerOpen: false
 
-    // ── The taskbar ───────────────────────────────────────────
+    readonly property color surfaceColor: "#1a1b26"
+    readonly property int cornerRadius: 16
+
+    // ── Taskbar ───────────────────────────────────────────────
     PanelWindow {
         id: bar
 
-        anchors {
-            left: true
-            right: true
-            bottom: true
-        }
+        anchors { left: true; right: true; bottom: true }
         implicitHeight: 48
-        color: "#1a1b26"
-
-        // Bar reserves its own space; drawer will not
+        color: root.surfaceColor
         exclusionMode: ExclusionMode.Auto
 
         MouseArea {
@@ -37,23 +33,15 @@ Scope {
         }
     }
 
-    // ── The drawer (separate window, sits above the bar) ──────
+    // ── Drawer window ─────────────────────────────────────────
     PanelWindow {
         id: drawerWindow
 
         readonly property int drawerWidth: 480
         readonly property int drawerHeight: 320
 
-        anchors {
-            left: true
-            right: true
-            bottom: true
-        }
-
-        // Anchor above the bar so its bottom edge meets the bar's top edge
+        anchors { left: true; right: true; bottom: true }
         margins.bottom: bar.implicitHeight
-
-        // Window is tall enough to fit the drawer when fully extended
         implicitHeight: drawerHeight
 
         color: "transparent"
@@ -64,29 +52,20 @@ Scope {
             ? WlrKeyboardFocus.OnDemand
             : WlrKeyboardFocus.None
 
-        // Only the drawer surface receives clicks; rest is click-through
         mask: Region { item: drawerSurface }
 
+        // The drawer body — all four corners rounded
         Rectangle {
             id: drawerSurface
 
-            // Half-width, centered horizontally
             width: drawerWindow.drawerWidth
             anchors.horizontalCenter: parent.horizontalCenter
-
-            // Same color as the bar — visually they're one piece
-            color: "#1a1b26"
-
-            // Round only the top corners so the bottom merges into the bar
-            topLeftRadius: 12
-            topRightRadius: 12
-            bottomLeftRadius: 0
-            bottomRightRadius: 0
-
-            // Pin to the bottom of the window (which sits on top of the bar)
             anchors.bottom: parent.bottom
 
-            // Animate the height — grows upward from the bar
+            color: root.surfaceColor
+            radius: root.cornerRadius
+            clip: true
+
             height: root.drawerOpen ? drawerWindow.drawerHeight : 0
 
             Behavior on height {
@@ -96,10 +75,6 @@ Scope {
                 }
             }
 
-            // Hide overflow during the grow animation
-            clip: true
-
-            // ── Drawer content ────────────────────────────────
             Column {
                 anchors.centerIn: parent
                 spacing: 16
@@ -118,6 +93,49 @@ Scope {
                     color: "#565f89"
                     font.pixelSize: 13
                 }
+            }
+        }
+
+        // ── Left inverse fillet ───────────────────────────────
+        // Sits just outside the drawer's bottom-left corner.
+        // Filled with bar color, with a quarter-circle carved out,
+        // so the bar appears to curve up into the drawer.
+        Canvas {
+            width: root.cornerRadius
+            height: root.cornerRadius
+            x: drawerSurface.x - width
+            y: drawerSurface.y + drawerSurface.height - height
+            visible: drawerSurface.height > 0
+
+            onPaint: {
+                const ctx = getContext("2d");
+                ctx.reset();
+                ctx.fillStyle = root.surfaceColor;
+                ctx.fillRect(0, 0, width, height);
+                ctx.globalCompositeOperation = "destination-out";
+                ctx.beginPath();
+                ctx.arc(width, 0, width, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // ── Right inverse fillet ──────────────────────────────
+        Canvas {
+            width: root.cornerRadius
+            height: root.cornerRadius
+            x: drawerSurface.x + drawerSurface.width
+            y: drawerSurface.y + drawerSurface.height - height
+            visible: drawerSurface.height > 0
+
+            onPaint: {
+                const ctx = getContext("2d");
+                ctx.reset();
+                ctx.fillStyle = root.surfaceColor;
+                ctx.fillRect(0, 0, width, height);
+                ctx.globalCompositeOperation = "destination-out";
+                ctx.beginPath();
+                ctx.arc(0, 0, width, 0, Math.PI * 2);
+                ctx.fill();
             }
         }
     }
