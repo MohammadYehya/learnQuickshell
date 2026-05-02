@@ -1,62 +1,107 @@
+// shell.qml
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
 
 Scope {
+    id: root
+
+    // Shared state — the bar reads/writes this, the drawer reads it
+    property bool drawerOpen: false
+
+    // ── The taskbar at the bottom ─────────────────────────────
     PanelWindow {
-        id: drawer
-        property bool opened: false
-        readonly property int drawerHeight: 360
+        id: taskbar
 
-        function toggle() { opened = !opened }
+        anchors {
+            left: true
+            right: true
+            bottom: true
+        }
+        implicitHeight: 40
+        color: "#1a1b26"
 
-        anchors { left: true; right: true; bottom: true }
-        implicitHeight: drawerHeight
-        color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
-        mask: Region { item: drawerSurface }
-        WlrLayershell.layer: WlrLayer.Overlay
+        // Reserve space so maximized apps don't overlap the bar
+        exclusionMode: ExclusionMode.Auto
 
-        // Toggle button
-        Rectangle {
-            anchors.bottom: parent.bottom
-            anchors.right: parent.right
-            anchors.margins: 16
-            width: 50; height: 50; radius: 8
-            color: "#534AB7"
-            Text { anchors.centerIn: parent; text: "☰"; color: "white"; font.pixelSize: 24 }
-            MouseArea { anchors.fill: parent; onClicked: drawer.toggle() }
+        Text {
+            anchors.centerIn: parent
+            text: root.drawerOpen ? "Click to close ▼" : "Click to open ▲"
+            color: "#a9b1d6"
+            font.pixelSize: 14
         }
 
-        // The drawer itself
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.drawerOpen = !root.drawerOpen
+        }
+    }
+
+    // ── The drawer that slides up ─────────────────────────────
+    PanelWindow {
+        id: drawer
+
+        readonly property int drawerHeight: 360
+
+        anchors {
+            left: true
+            right: true
+            bottom: true
+        }
+
+        // Sit just above the taskbar
+        margins.bottom: taskbar.implicitHeight
+        implicitHeight: drawerHeight
+
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+
+        // Float above normal windows
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: root.drawerOpen
+            ? WlrKeyboardFocus.OnDemand
+            : WlrKeyboardFocus.None
+
+        // Click-through except over the drawer surface itself
+        mask: Region { item: drawerSurface }
+
         Rectangle {
             id: drawerSurface
-            anchors { left: parent.left; right: parent.right }
+
+            anchors.left: parent.left
+            anchors.right: parent.right
             height: drawer.drawerHeight
-            y: drawer.opened ? 0 : drawer.drawerHeight
+
+            // Slide: hidden below window when closed, visible when open
+            y: root.drawerOpen ? 0 : drawer.drawerHeight
+
             color: "#1a1b26"
             topLeftRadius: 16
             topRightRadius: 16
 
             Behavior on y {
-                NumberAnimation { duration: 350; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: 350
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            // Drag handle indicator
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: 10
+                width: 40
+                height: 4
+                radius: 2
+                color: "#444b6a"
             }
 
             Text {
                 anchors.centerIn: parent
-                text: "← Swipe up or click button to close"
+                text: "Drawer content goes here"
                 color: "#a9b1d6"
-                font.pixelSize: 16
-            }
-
-            DragHandler {
-                yAxis.enabled: true
-                target: drawerSurface
-                onActiveChanged: {
-                    if (!active && drawerSurface.y > drawer.drawerHeight * 0.3) {
-                        drawer.opened = false
-                    }
-                }
+                font.pixelSize: 18
             }
         }
     }
