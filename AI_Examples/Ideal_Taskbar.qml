@@ -18,7 +18,7 @@ Scope {
             right: true
             bottom: true
         }
-        implicitHeight: 48
+        implicitHeight: 20
         color: root.shellColor
         exclusionMode: ExclusionMode.Auto
 
