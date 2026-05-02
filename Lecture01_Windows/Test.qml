@@ -1,16 +1,13 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import QtQuick.Shapes
 
 Scope {
     id: root
 
     // Shared state — single source of truth for the drawer
     property bool drawerOpen: false
-
-    // Shared design tokens
-    readonly property color surfaceColor: "#1a1b26"
-    readonly property int cornerRadius: 16
 
     // ── The taskbar ───────────────────────────────────────────
     PanelWindow {
@@ -22,7 +19,7 @@ Scope {
             bottom: true
         }
         implicitHeight: 48
-        color: root.surfaceColor
+        color: "#1a1b26"
 
         exclusionMode: ExclusionMode.Auto
 
@@ -46,6 +43,10 @@ Scope {
 
         readonly property int drawerWidth: 480
         readonly property int drawerHeight: 320
+        // How far the curve flares outward into the bar at the bottom corners
+        readonly property int flareRadius: 24
+        // Top corner radius (convex — rounded outward)
+        readonly property int topRadius: 16
 
         anchors {
             left: true
@@ -53,7 +54,6 @@ Scope {
             bottom: true
         }
 
-        // Anchor above the bar so its bottom edge meets the bar's top edge
         margins.bottom: bar.implicitHeight
 
         implicitHeight: drawerHeight
@@ -66,24 +66,20 @@ Scope {
             ? WlrKeyboardFocus.OnDemand
             : WlrKeyboardFocus.None
 
-        // Mask covers drawer surface plus the inverse corners
-        mask: Region {
-            item: drawerSurface
-        }
+        mask: Region { item: drawerShape }
 
-        // ── Drawer surface ────────────────────────────────────
-        Rectangle {
-            id: drawerSurface
+        // ── The custom-shaped drawer surface ──────────────────
+        Shape {
+            id: drawerShape
 
-            width: drawerWindow.drawerWidth
+            // Width includes the flare on each side, so visually
+            // the "main" drawer is drawerWidth wide and the flare
+            // extends beyond it
+            width: drawerWindow.drawerWidth + (drawerWindow.flareRadius * 2)
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
 
-            color: root.surfaceColor
-
-            // Round all four corners now — bottom curves outward into the bar
-            radius: root.cornerRadius
-
+            // Animated height — grows upward from the bar
             height: root.drawerOpen ? drawerWindow.drawerHeight : 0
 
             Behavior on height {
@@ -94,9 +90,94 @@ Scope {
             }
 
             clip: true
+            preferredRendererType: Shape.CurveRenderer
 
+            ShapePath {
+                strokeWidth: 0
+                strokeColor: "transparent"
+                fillColor: "#1a1b26"
+
+                // Geometry shorthand
+                readonly property real w: drawerShape.width
+                readonly property real h: drawerShape.height
+                readonly property real flare: drawerWindow.flareRadius
+                readonly property real top: drawerWindow.topRadius
+
+                // Start at bottom-left of the flared base
+                startX: 0
+                startY: h
+
+                // Concave curve flaring inward and up to the drawer body
+                PathArc {
+                    x: drawerShape.shapeBottomLeftX
+                    y: drawerShape.shapeBottomLeftY
+                    radiusX: drawerWindow.flareRadius
+                    radiusY: drawerWindow.flareRadius
+                    direction: PathArc.Counterclockwise
+                }
+
+                // Up the left side of the drawer body
+                PathLine {
+                    x: drawerShape.shapeBottomLeftX
+                    y: drawerWindow.topRadius
+                }
+
+                // Top-left convex rounded corner
+                PathArc {
+                    x: drawerShape.shapeBottomLeftX + drawerWindow.topRadius
+                    y: 0
+                    radiusX: drawerWindow.topRadius
+                    radiusY: drawerWindow.topRadius
+                    direction: PathArc.Clockwise
+                }
+
+                // Across the top
+                PathLine {
+                    x: drawerShape.shapeBottomRightX - drawerWindow.topRadius
+                    y: 0
+                }
+
+                // Top-right convex rounded corner
+                PathArc {
+                    x: drawerShape.shapeBottomRightX
+                    y: drawerWindow.topRadius
+                    radiusX: drawerWindow.topRadius
+                    radiusY: drawerWindow.topRadius
+                    direction: PathArc.Clockwise
+                }
+
+                // Down the right side of the drawer body
+                PathLine {
+                    x: drawerShape.shapeBottomRightX
+                    y: drawerShape.height - drawerWindow.flareRadius
+                }
+
+                // Concave curve flaring outward and down to the right edge
+                PathArc {
+                    x: drawerShape.width
+                    y: drawerShape.height
+                    radiusX: drawerWindow.flareRadius
+                    radiusY: drawerWindow.flareRadius
+                    direction: PathArc.Counterclockwise
+                }
+
+                // Close along the bottom back to startX, startY (handled implicitly)
+                PathLine {
+                    x: 0
+                    y: drawerShape.height
+                }
+            }
+
+            // Computed positions of the drawer body's bottom corners
+            readonly property real shapeBottomLeftX: drawerWindow.flareRadius
+            readonly property real shapeBottomLeftY: height - flareRadius
+            readonly property real shapeBottomRightX: width - drawerWindow.flareRadius
+            readonly property real shapeBottomRightY: height - flareRadius
+
+            // ── Drawer content ────────────────────────────────
             Column {
                 anchors.centerIn: parent
+                anchors.verticalCenterOffset: -drawerWindow.flareRadius / 2
                 spacing: 16
 
                 Text {
@@ -112,91 +193,6 @@ Scope {
                     text: "Put widgets, launchers, or anything here"
                     color: "#565f89"
                     font.pixelSize: 13
-                }
-            }
-        }
-
-        // ── Inverse corner pieces (the "fillets") ─────────────
-        // These sit just outside the drawer's bottom corners, on the bar.
-        // Each is a square the size of the radius, filled with the bar
-        // color, with a transparent quarter-circle carved out of it.
-        // The visual effect: the bar curves up into the drawer.
-
-        // Left fillet
-        Item {
-            width: root.cornerRadius
-            height: root.cornerRadius
-            x: drawerSurface.x - width
-            y: drawerSurface.y + drawerSurface.height - height
-
-            // Only show fillets when the drawer is actually visible
-            visible: drawerSurface.height > 0
-
-            Rectangle {
-                anchors.fill: parent
-                color: root.surfaceColor
-            }
-
-            // Carve out the quarter-circle using a Rectangle whose
-            // border draws an arc, then mask it. Simpler approach:
-            // draw a circle larger than the square, offset so only
-            // the corner of the circle "eats into" our square.
-            Rectangle {
-                width: parent.width * 2
-                height: parent.height * 2
-                radius: width / 2
-                color: "transparent"
-                // Position so the circle's bottom-right corner aligns
-                // with our top-left — this makes the visible quarter
-                // appear in the top-left of the parent
-                x: -parent.width
-                y: -parent.height
-
-                // Use a border-only ring won't work; we need a real
-                // cut-out. Instead, layer effects:
-                layer.enabled: true
-                layer.samples: 4
-            }
-
-            // Cleaner approach: use a Canvas to paint the exact shape
-            Canvas {
-                anchors.fill: parent
-                onPaint: {
-                    const ctx = getContext("2d");
-                    ctx.reset();
-                    ctx.fillStyle = root.surfaceColor;
-                    // Fill the whole square
-                    ctx.fillRect(0, 0, width, height);
-                    // Carve out the top-right quarter circle
-                    ctx.globalCompositeOperation = "destination-out";
-                    ctx.beginPath();
-                    ctx.arc(width, 0, width, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            }
-        }
-
-        // Right fillet
-        Item {
-            width: root.cornerRadius
-            height: root.cornerRadius
-            x: drawerSurface.x + drawerSurface.width
-            y: drawerSurface.y + drawerSurface.height - height
-
-            visible: drawerSurface.height > 0
-
-            Canvas {
-                anchors.fill: parent
-                onPaint: {
-                    const ctx = getContext("2d");
-                    ctx.reset();
-                    ctx.fillStyle = root.surfaceColor;
-                    ctx.fillRect(0, 0, width, height);
-                    ctx.globalCompositeOperation = "destination-out";
-                    ctx.beginPath();
-                    // Carve out the top-left quarter circle
-                    ctx.arc(0, 0, width, 0, Math.PI * 2);
-                    ctx.fill();
                 }
             }
         }
