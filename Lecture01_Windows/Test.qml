@@ -66,118 +66,109 @@ Scope {
     }
 
     Item {
-        id: drawerContainer
-        width: drawerWindow.drawerWidth + root.curveRadius * 2
+    id: drawerContainer
+    width: drawerWindow.drawerWidth + root.curveRadius * 2
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.bottom: parent.bottom
+
+    height: root.drawerOpen ? drawerWindow.drawerHeight : 0
+
+    Behavior on height {
+        NumberAnimation {
+            duration: 320
+            easing.type: Easing.OutCubic
+        }
+    }
+
+    // ── Main drawer body ──────────────────────────────────────
+    Rectangle {
+        id: drawerSurface
+
+        width: drawerWindow.drawerWidth
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
+        height: parent.height
 
-        height: root.drawerOpen ? drawerWindow.drawerHeight : 0
+        color: root.shellColor
+        topLeftRadius: 12
+        topRightRadius: 12
+        bottomLeftRadius: 0
+        bottomRightRadius: 0
+        clip: true
 
-        Behavior on height {
-            NumberAnimation {
-                duration: 320
-                easing.type: Easing.OutCubic
-            }
-        }
+        Column {
+            anchors.centerIn: parent
+            spacing: 16
 
-        // ── Main drawer body ──────────────────────────────────
-        Rectangle {
-            id: drawerSurface
-
-            width: drawerWindow.drawerWidth
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: parent.bottom
-            height: parent.height
-
-            color: root.shellColor
-            topLeftRadius: 12
-            topRightRadius: 12
-            bottomLeftRadius: 0
-            bottomRightRadius: 0
-            clip: true
-
-            Column {
-                anchors.centerIn: parent
-                spacing: 16
-
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Drawer"
-                    color: "#a9b1d6"
-                    font.pixelSize: 20
-                    font.weight: 500
-                }
-
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Put widgets, launchers, or anything here"
-                    color: "#565f89"
-                    font.pixelSize: 13
-                }
-            }
-        }
-
-        // ── Left concave curve ────────────────────────────────
-        Canvas {
-            id: leftCurve
-            width: root.curveRadius
-            height: root.curveRadius
-            anchors.right: drawerSurface.left
-            anchors.bottom: parent.bottom
-
-            // Fade with the drawer; stay hidden when fully closed
-            opacity: drawerContainer.height > 0 ? 1 : 0
-            visible: opacity > 0
-
-            Behavior on opacity {
-                NumberAnimation { duration: 150 }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Drawer"
+                color: "#a9b1d6"
+                font.pixelSize: 20
+                font.weight: 500
             }
 
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                ctx.fillStyle = root.shellColor
-                ctx.beginPath()
-                ctx.moveTo(0, height)
-                ctx.lineTo(width, height)
-                ctx.lineTo(width, 0)
-                // Concave: arc center at top-left (0,0), sweep 0 → π/2 clockwise
-                ctx.arc(0, 0, width, 0, Math.PI / 2, false)
-                ctx.closePath()
-                ctx.fill()
-            }
-        }
-
-        // ── Right concave curve (mirror of left) ──────────────
-        Canvas {
-            id: rightCurve
-            width: root.curveRadius
-            height: root.curveRadius
-            anchors.left: drawerSurface.right
-            anchors.bottom: parent.bottom
-
-            opacity: drawerContainer.height > 0 ? 1 : 0
-            visible: opacity > 0
-
-            Behavior on opacity {
-                NumberAnimation { duration: 150 }
-            }
-
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                ctx.fillStyle = root.shellColor
-                ctx.beginPath()
-                ctx.moveTo(0, height)
-                ctx.lineTo(width, height)
-                ctx.lineTo(0, 0)
-                // Concave: arc center at top-right (width, 0),
-                // sweep π/2 → π clockwise (traces bottom-left quadrant)
-                ctx.arc(width, 0, width, Math.PI / 2, Math.PI, false)
-                ctx.closePath()
-                ctx.fill()
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Put widgets, launchers, or anything here"
+                color: "#565f89"
+                font.pixelSize: 13
             }
         }
     }
+
+    // ── Left concave curve — anchored to drawerSurface's bottom-left ──
+    Canvas {
+        id: leftCurve
+        width: root.curveRadius
+        height: root.curveRadius
+
+        // Sit just outside the drawer's bottom-left corner
+        anchors.right: drawerSurface.left
+        anchors.bottom: drawerSurface.bottom
+
+        // Hide once the drawer has collapsed enough that the curve
+        // would extend below the bar's top edge
+        visible: drawerSurface.height >= root.curveRadius
+
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.reset()
+            ctx.fillStyle = root.shellColor
+            ctx.beginPath()
+            ctx.moveTo(0, height)
+            ctx.lineTo(width, height)
+            ctx.lineTo(width, 0)
+            ctx.arc(0, 0, width, 0, Math.PI / 2, false)
+            ctx.closePath()
+            ctx.fill()
+        }
+    }
+
+    // ── Right concave curve — anchored to drawerSurface's bottom-right ──
+    Canvas {
+        id: rightCurve
+        width: root.curveRadius
+        height: root.curveRadius
+
+        anchors.left: drawerSurface.right
+        anchors.bottom: drawerSurface.bottom
+
+        visible: drawerSurface.height >= root.curveRadius
+
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.reset()
+            ctx.fillStyle = root.shellColor
+            ctx.beginPath()
+            ctx.moveTo(0, height)
+            ctx.lineTo(width, height)
+            ctx.lineTo(0, 0)
+            ctx.arc(width, 0, width, Math.PI / 2, Math.PI, false)
+            ctx.closePath()
+            ctx.fill()
+        }
+    }
+}
 }
 }
